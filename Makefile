@@ -5,13 +5,12 @@ CC=gcc
 CPPFLAGS=
 CFLAGS=-g -Werror-implicit-function-declaration
 
-#List all the .o files here that need to be linked 
-OBJS=ftp.o network.o
+OBJS=ftp.o network.o printRoutines.o
 
-
+printRoutines.o : printRoutines.c printRoutines.h
 network.o: network.c network.h common.h
 
-ftp.o: ftp.c ftp.h common.h network.h
+ftp.o: ftp.c ftp.h common.h network.h printRoutines.h
 
 
 ftp: $(OBJS) 

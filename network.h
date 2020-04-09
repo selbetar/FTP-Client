@@ -2,7 +2,6 @@
 #define __NETWORK_H__
 
 #include <netdb.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>

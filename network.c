@@ -1,5 +1,6 @@
  #include "network.h"
  #include "common.h"
+#include <stdio.h>
 
 int create_connection (const char *host, const char *port)
 {
