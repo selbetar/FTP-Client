@@ -60,43 +60,54 @@ int main (int argc, char *argv[])
 
         int scode = execute_command (command, parameter);
 
-        if (scode == -1) {
-            // flush();
+        if (scode <= 0) {
+            cleanup();
             break;
         }
     }
     return 0;
 }
 
+// returns -1 on error [connection need to be closed and client]
+// returns 0 on conncetion closure [client exit with no error]
+// returns 1 otherwise
 int execute_command (const char *command, const char *parameter)
 {
     if (strcasecmp (command, "quit") == 0) {
-        // todo
+        if (check_argc (parameter, 0))
+            return quit_cmd();
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "user") == 0) {
         if (check_argc (parameter, 1))
-            return user_cmd (parameter);
+            return two_cmd ("user", parameter);
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "pass") == 0) {
         if (check_argc (parameter, 1))
-            return pass_cmd (parameter);
+            return two_cmd ("pass", parameter);
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "get") == 0) {
         // todo
     }
     else if (strcasecmp (command, "features") == 0) {
-        // todo
+        if (check_argc (parameter, 0))
+            return one_cmd("feat");
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "cd") == 0) {
-        // todo
+        if (check_argc (parameter, 1))
+            return two_cmd ("cwd", parameter);
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "nlist") == 0) {
         // todo
     }
     else if (strcasecmp (command, "pwd") == 0) {
-        // todo
+        if (check_argc (parameter, 0))
+            return one_cmd("pwd");
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "put") == 0) {
         // todo
@@ -105,7 +116,7 @@ int execute_command (const char *command, const char *parameter)
         // todo
     }
     else {
-        printErrorInvalidCommand (stdout, command);
+        return printErrorInvalidCommand (stdout, command);
     }
     return 0;
 }
@@ -115,11 +126,11 @@ int execute_command (const char *command, const char *parameter)
  * length of server response to the msg
  * -1 on error
  * */
-int user_cmd (const char *parameter)
+int one_cmd (const char *cmd)
 {
     char buffer[BUFSIZ];
     memset (buffer, 0, BUFSIZ);
-    snprintf (buffer, BUFSIZ, "%s%s", "user ", parameter);
+    snprintf (buffer, BUFSIZ, "%s", cmd);
 
     ssize_t length = send_msg (buffer);
 
@@ -129,11 +140,11 @@ int user_cmd (const char *parameter)
     return read_response (buffer);
 }
 
-int pass_cmd (const char *parameter)
+int two_cmd (const char *cmd, const char *param)
 {
     char buffer[BUFSIZ];
     memset (buffer, 0, BUFSIZ);
-    snprintf (buffer, BUFSIZ, "%s%s", "pass ", parameter);
+    snprintf (buffer, BUFSIZ, "%s%s%s", cmd, " ", param);
 
     ssize_t length = send_msg (buffer);
 
@@ -142,6 +153,23 @@ int pass_cmd (const char *parameter)
 
     return read_response (buffer);
 }
+
+int quit_cmd()
+{
+    char buffer[BUFSIZ];
+    memset (buffer, 0, BUFSIZ);
+    snprintf (buffer, BUFSIZ, "%s", "quit");
+
+    ssize_t length = send_msg (buffer);
+
+    if (length < 0)
+        return -1;
+
+    read_response (buffer);
+    cleanup();
+    return 0;
+}
+
 /*
 * returns -1 on error, number of bytes sent otherwise
 */
@@ -211,6 +239,10 @@ int check_argc (const char *args, unsigned int exepcted)
 // {
 // }
 
-// void flush()
-// {
-// }
+void cleanup()
+{
+    if (sfd != -1) {
+        close (sfd);
+        sfd = -1;
+    }
+}

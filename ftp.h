@@ -9,12 +9,13 @@ typedef struct pasv_response {
 
 } pasvr_t;
 int execute_command (const char *command, const char *parameter);
-int user_cmd(const char* parameter);
-int pass_cmd(const char* parameter);
-int get_cmd(const char* file);
+int one_cmd(const char* parameter);
+int two_cmd(const char* cmd, const char* parameter);
+int quit_cmd ();
 int feat_cmd();
-int cd_cmd(const char* path);
-int pwd_cmd();
+
+int get_cmd(const char* file);
+
 int pasv_cmd();
 
 
@@ -22,4 +23,5 @@ int read_response (char *buf);
 int send_msg (const char *msg);
 
 int check_argc (const char *args, unsigned int exepcted);
+void cleanup();
 #endif

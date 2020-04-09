@@ -45,7 +45,7 @@ int create_connection (const char *host, const char *port)
         fprintf (stderr, "Could not connect\n");
         return -1;
     }
-
+    
     freeaddrinfo (result); /* No longer needed */
 
     return sfd;
