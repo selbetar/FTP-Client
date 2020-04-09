@@ -1,4 +1,5 @@
 #include "ftp.h"
+#include "common.h"
 #include "network.h"
 #include "printRoutines.h"
 
@@ -27,8 +28,8 @@ int main (int argc, char *argv[])
     if (sfd < 0)
         exit (EXIT_FAILURE);
 
-    char buffer[BUFSIZ];
-    memset (buffer, 0, BUFSIZ);
+    char buffer[BUF_SIZE];
+    memset (buffer, 0, BUF_SIZE);
 
     if (read_response (buffer) <= 0)
         exit (EXIT_FAILURE);
@@ -60,7 +61,7 @@ int main (int argc, char *argv[])
 
         int scode = execute_command (command, parameter);
 
-        if (scode <= 0) {
+        if (scode < 0) {
             cleanup();
             break;
         }
@@ -69,7 +70,7 @@ int main (int argc, char *argv[])
 }
 
 // returns -1 on error [connection need to be closed and client]
-// returns 0 on conncetion closure [client exit with no error]
+// returns -2 on conncetion closure [client exit with no error]
 // returns 1 otherwise
 int execute_command (const char *command, const char *parameter)
 {
@@ -93,7 +94,7 @@ int execute_command (const char *command, const char *parameter)
     }
     else if (strcasecmp (command, "features") == 0) {
         if (check_argc (parameter, 0))
-            return one_cmd("feat");
+            return one_cmd ("feat");
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "cd") == 0) {
@@ -102,11 +103,13 @@ int execute_command (const char *command, const char *parameter)
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "nlist") == 0) {
-        // todo
+        if (check_argc (parameter, 0) || check_argc (parameter, 1))
+            return nlst_cmd (parameter);
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "pwd") == 0) {
         if (check_argc (parameter, 0))
-            return one_cmd("pwd");
+            return one_cmd ("pwd");
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "put") == 0) {
@@ -128,9 +131,9 @@ int execute_command (const char *command, const char *parameter)
  * */
 int one_cmd (const char *cmd)
 {
-    char buffer[BUFSIZ];
-    memset (buffer, 0, BUFSIZ);
-    snprintf (buffer, BUFSIZ, "%s", cmd);
+    char buffer[BUF_SIZE];
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s", cmd);
 
     ssize_t length = send_msg (buffer);
 
@@ -142,9 +145,9 @@ int one_cmd (const char *cmd)
 
 int two_cmd (const char *cmd, const char *param)
 {
-    char buffer[BUFSIZ];
-    memset (buffer, 0, BUFSIZ);
-    snprintf (buffer, BUFSIZ, "%s%s%s", cmd, " ", param);
+    char buffer[BUF_SIZE];
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s%s%s", cmd, " ", param);
 
     ssize_t length = send_msg (buffer);
 
@@ -154,11 +157,104 @@ int two_cmd (const char *cmd, const char *param)
     return read_response (buffer);
 }
 
+/**
+ * RETURNS:
+ * the socket_fd on which data connection
+ * wil occur
+ * -1 on error
+ * 0 if 227 wasn't received
+ * */
+int pasv_cmd()
+{
+    int data_fd = -1;
+    char buffer[BUF_SIZE];
+    u_int32_t h1, h2, h3, h4, p1, p2;
+
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s", "pasv");
+
+    ssize_t length = send_msg (buffer);
+
+    if (length < 0)
+        return -1;
+
+    if (read_response (buffer) < 0)
+        return -1;
+
+    if (strstr (buffer, "227") != buffer)
+        return 0;
+
+    length = sscanf (buffer, "227 Entering Passive Mode (%u,%u,%u,%u,%u,%u)",
+                     &h1, &h2, &h3, &h4, &p1, &p2);
+    if (length != 6) {
+        fprintf (stderr, "PASV scan failure!\n");
+        return -1;
+    }
+
+    struct sockaddr_in data_addr;
+    memset (&data_addr, 0, sizeof (struct sockaddr_in));
+    data_addr.sin_addr.s_addr = htonl ((h1 << 24) | ((h2 & 0xff) << 16) | ((h3 & 0xff) << 8) | (h4 & 0xff));
+    data_addr.sin_family      = AF_INET;
+    data_addr.sin_port        = htons (((p1 & 0xff) << 8) | (p2 & 0xff));
+
+    data_fd = socket (PF_INET, SOCK_STREAM, 0);
+
+    if (data_fd < 0) {
+        perror ("Data Socket Creation Failed");
+        return -1;
+    }
+
+    int scode = connect (data_fd, (const struct sockaddr *)&data_addr, sizeof (data_addr));
+    if (scode < 0)
+        return -1;
+    return data_fd;
+}
+
+int nlst_cmd (const char *path)
+{
+    char buffer[BUF_SIZE];
+    int rcode, data_fd;
+    ssize_t length;
+
+    data_fd = pasv_cmd();
+
+    if (data_fd <= 0)
+        return data_fd;
+
+    memset (buffer, 0, BUF_SIZE);
+    if (path == NULL) {
+        length = snprintf (buffer, BUF_SIZE, "%s", "nlst");
+    }
+    else {
+        length = snprintf (buffer, BUF_SIZE, "%s%s", "nlst ", path);
+    }
+
+    rcode = send_msg (buffer);
+    if (rcode < 0)
+        return -1;
+
+    rcode = read_response (buffer);
+    if (rcode < 0)
+        return -1;
+
+    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
+        while (read (data_fd, buffer, BUF_SIZE) > 0)
+            printResponse (stdout, buffer);
+
+        rcode = read_response (buffer);
+        if (rcode < 0)
+            return -1;
+    }
+
+    close (data_fd);
+    return 1;
+}
+
 int quit_cmd()
 {
-    char buffer[BUFSIZ];
-    memset (buffer, 0, BUFSIZ);
-    snprintf (buffer, BUFSIZ, "%s", "quit");
+    char buffer[BUF_SIZE];
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s", "quit");
 
     ssize_t length = send_msg (buffer);
 
@@ -167,7 +263,7 @@ int quit_cmd()
 
     read_response (buffer);
     cleanup();
-    return 0;
+    return -2;
 }
 
 /*
@@ -175,7 +271,7 @@ int quit_cmd()
 */
 int send_msg (const char *msg)
 {
-    char buffer[BUFSIZ];
+    char buffer[BUF_SIZE];
     ssize_t length;
 
     memset (buffer, 0, 1024);
@@ -190,14 +286,23 @@ int send_msg (const char *msg)
 
 int read_response (char *buffer)
 {
-    memset (buffer, 0, BUFSIZ);
-    ssize_t length = read (sfd, buffer, BUFSIZ);
+
+    memset (buffer, 0, BUF_SIZE);
+    ssize_t length = read (sfd, buffer, BUF_SIZE);
     if (length <= 0) {
         perror ("Error while reading from server. Terminiating Control Connection");
         return -1;
     }
+
     printResponse (stdout, buffer);
-    char *rcode = strtok (buffer, " ");
+
+    // copy the response to manipulate it
+    // without modifing the original buffer
+    char rcopy[length];
+    memset (rcopy, 0, length);
+    snprintf (rcopy, BUF_SIZE, "%s", buffer);
+
+    char *rcode = strtok (rcopy, " ");
     if (strcmp (rcode, "421") == 0) {
         printf ("%s\n", "Server Closing Control Connection. Shutting Down.");
         return -1;
@@ -216,15 +321,15 @@ int read_response (char *buffer)
 int check_argc (const char *args, unsigned int exepcted)
 {
     int count = 0;
-    char argcpy[BUFSIZ];
+    char argcpy[BUF_SIZE];
 
     if (exepcted == 0) {
         return args == NULL;
     }
 
     // make a copy of parameter for count checking
-    memset (argcpy, 0, BUFSIZ);
-    snprintf (argcpy, BUFSIZ, "%s", args);
+    memset (argcpy, 0, BUF_SIZE);
+    snprintf (argcpy, BUF_SIZE, "%s", args);
 
     char *param = strtok (argcpy, " \t\n\f\r\v");
     while (param != NULL) {
