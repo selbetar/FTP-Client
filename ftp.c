@@ -295,7 +295,22 @@ int read_response (char *buffer)
     }
 
     printResponse (stdout, buffer);
-
+    
+    uint32_t i_rcode;
+    char buf[24];
+    memset (buf, 0, 24);
+    // check for multiline response: d{3}-
+    if (sscanf (buffer, "%u%s", &i_rcode, buf) == 2 && strcmp(buf, "-") == 0) {
+        memset (buf, 0, 24);
+        snprintf (buf, 24, "%d", i_rcode);
+        while (1) {
+            memset (buffer, 0, BUF_SIZE);
+            length = read (sfd, buffer, BUF_SIZE);
+            printResponse (stdout, buffer);
+            if (strstr (buffer, buf) == buffer)
+                break;
+        }
+    }
     // copy the response to manipulate it
     // without modifing the original buffer
     char rcopy[length];
@@ -339,10 +354,6 @@ int check_argc (const char *args, unsigned int exepcted)
 
     return count == exepcted;
 }
-
-// pasvr_t getPasvData()
-// {
-// }
 
 void cleanup()
 {
