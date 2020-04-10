@@ -1,5 +1,6 @@
 # FTP-Client
-A Simple FTP Client that supports a subset of commands defined by [RFC959](https://www.ietf.org/rfc/rfc959.txt) and one from [RFC2389](https://tools.ietf.org/html/rfc2389#section-3.1)
+A Simple FTP Client that supports a subset of commands defined by [RFC959](https://www.ietf.org/rfc/rfc959.txt) and one from [RFC2389](https://tools.ietf.org/html/rfc2389#section-3.1).
+This client supports passive mode only for data transfer.
 
 ## Commands Supported
 
