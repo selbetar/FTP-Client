@@ -1,9 +1,9 @@
 #include "ftp.h"
-#include "common.h"
 #include "network.h"
 #include "printRoutines.h"
 
 #include <strings.h>
+
 unsigned int sfd; // Control Connection fd
 
 int main (int argc, char *argv[])
@@ -11,9 +11,7 @@ int main (int argc, char *argv[])
     char line[MAX_LINE]; // stores terminal commands
     char *command, *parameter;
     int c;
-    // 1 program
-    // 2 server
-    // 3 port
+
     if (argc < 2 || argc > 3) {
         fprintf (stderr, "Usage: %s <host> <port>\n", argv[0]);
         fprintf (stderr, "     <host>  The address of the ftp server.\n");
@@ -39,15 +37,17 @@ int main (int argc, char *argv[])
         if (isatty (STDIN_FILENO))
             printf ("> ");
 
+        // break loop if EOF
         if (!fgets (line, sizeof (line), stdin))
             break;
 
+        // line could not be read entirely
         if (!strchr (line, '\n')) {
+            // read to the end of the lline
             while ((c = fgetc (stdin)) != EOF && c != '\n')
                 ;
             if (c == '\n') {
-                //printErrorCommmandTooLong(stdout);
-                fprintf (stdout, "%s", "ok");
+                printErrorCommmandTooLong (stdout);
                 continue;
             }
         }
@@ -69,9 +69,6 @@ int main (int argc, char *argv[])
     return 0;
 }
 
-// returns -1 on error [connection need to be closed and client]
-// returns -2 on conncetion closure [client exit with no error]
-// returns 1 otherwise
 int execute_command (const char *command, const char *parameter)
 {
     if (strcasecmp (command, "quit") == 0) {
@@ -130,8 +127,6 @@ int execute_command (const char *command, const char *parameter)
     return 0;
 }
 
-// retuns 1 on success
-// -1 on error
 int login_cmd (const char *cmd, const char *param, char *response)
 {
     int length;
@@ -142,14 +137,6 @@ int login_cmd (const char *cmd, const char *param, char *response)
     return length < 0 ? -1 : bin_type (res_buf);
 }
 
-/**
- * Sends an arbitrary cmd
- * if response is not NULL it sets it
- * to the response of the server
- * RETURN:
- * length of server response to the msg
- * -1 on error
- * */
 int rand_cmd (const char *cmd, const char *param, char *response)
 {
     char buffer[BUF_SIZE];
@@ -169,13 +156,6 @@ int rand_cmd (const char *cmd, const char *param, char *response)
     return length < 0 ? -1 : read_response (res_buff);
 }
 
-/**
- * RETURNS:
- * the socket_fd on which data connection
- * wil occur
- * -1 on error
- * 0 if 227 wasn't received
- * */
 int pasv_cmd (char *response)
 {
     char buffer[BUF_SIZE];
@@ -224,9 +204,6 @@ int pasv_cmd (char *response)
     return data_fd;
 }
 
-// returns 1 on sucess
-// 0 if pasv failed
-// -1 on error
 int nlst_cmd (const char *path, char *response)
 {
     char buffer[BUF_SIZE];
@@ -246,8 +223,7 @@ int nlst_cmd (const char *path, char *response)
     if (strstr (res_buf, "150 ") == res_buf || strstr (res_buf, "125 ") == res_buf) {
         memset (res_buf, 0, BUF_SIZE);
         while (read (data_fd, res_buf, BUF_SIZE) > 0) {
-            // todo change print format
-            printResponse (stdout, res_buf);
+            fprintf (stdout, "%s", res_buf);
             memset (res_buf, 0, BUF_SIZE);
         }
         length = read_response (res_buf);
@@ -259,9 +235,6 @@ int nlst_cmd (const char *path, char *response)
     return 1;
 }
 
-// returns 1 on sucess
-// 0 if pasv failed
-// -1 on error
 int get_cmd (const char *file, char *response)
 {
     char buffer[BUF_SIZE];
@@ -308,9 +281,6 @@ int get_cmd (const char *file, char *response)
     return 1;
 }
 
-// returns 1 on sucess
-// 0 if pasv failed
-// -1 on error
 int put_cmd (const char *file, char *response)
 {
     char buffer[BUF_SIZE];
@@ -358,8 +328,6 @@ int put_cmd (const char *file, char *response)
     return 1;
 }
 
-// returns -2 on sucess
-// -1 on error
 int quit_cmd (char *response)
 {
     char buffer[BUF_SIZE];
@@ -377,9 +345,6 @@ int quit_cmd (char *response)
     return -2;
 }
 
-// sets the transfer type to binary on login
-// returns 1 on success
-// returns -1 on error
 int bin_type (const char *response)
 {
     if (strstr (response, "230 ")) {
@@ -390,9 +355,6 @@ int bin_type (const char *response)
     return 1;
 }
 
-/*
-* returns -1 on error, number of bytes sent otherwise
-*/
 ssize_t send_msg (const char *msg)
 {
     char buffer[BUF_SIZE];
@@ -408,9 +370,6 @@ ssize_t send_msg (const char *msg)
     return length;
 }
 
-/*
-* returns -1 on error, number of bytes read otherwise
-*/
 ssize_t read_response (char *response)
 {
 
@@ -456,14 +415,6 @@ ssize_t read_response (char *response)
     return length;
 }
 
-/**
- * Checks if the number of string seperated by spaces
- *  in args matches the expected number
- * 
- * RETURN:
- * returns 1 if argc == expected
- * returns 0 otherwise
- * */
 int check_argc (const char *args, unsigned int exepcted)
 {
     int count = 1;

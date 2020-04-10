@@ -1,8 +1,12 @@
 #include "network.h"
-#include "common.h"
 #include <stdio.h>
 #include <unistd.h>
 
+/**
+ * Code is taken from getaddrinfo man page client example
+ * with some modification.
+ * https://linux.die.net/man/3/getaddrinfo
+ **/
 int create_connection (const char *host, const char *port)
 {
     struct addrinfo hints;
@@ -10,7 +14,7 @@ int create_connection (const char *host, const char *port)
     int sfd, s, j;
     size_t len;
     ssize_t nread;
-    char buf[BUF_SIZE];
+    char buf[1024];
 
     /* Obtain address(es) matching host/port */
     memset (&hints, 0, sizeof (struct addrinfo));
