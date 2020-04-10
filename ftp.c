@@ -395,6 +395,7 @@ ssize_t read_response (char *response)
             while (1) {
                 memset (response, 0, BUF_SIZE);
                 length = read (sfd, response, BUF_SIZE);
+                fprintf(stdout, "%s", response);
                 if (strstr (response, buf) != NULL)
                     break;
             }
