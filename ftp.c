@@ -115,7 +115,9 @@ int execute_command (const char *command, const char *parameter)
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "put") == 0) {
-        // todo
+        if (check_argc (parameter, 1))
+            return put_cmd (parameter);
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "delete") == 0) {
         // todo
@@ -170,8 +172,8 @@ int pasv_cmd()
 {
     int data_fd = -1;
     char buffer[BUF_SIZE];
-    u_int32_t h1, h2, h3, h4, p1, p2;
-
+    u_int32_t a, h1, h2, h3, h4, p1, p2;
+    char t[256];
     memset (buffer, 0, BUF_SIZE);
     snprintf (buffer, BUF_SIZE, "%s", "pasv");
 
@@ -186,9 +188,9 @@ int pasv_cmd()
     if (strstr (buffer, "227") != buffer)
         return 0;
 
-    length = sscanf (buffer, "227 Entering Passive Mode (%u,%u,%u,%u,%u,%u)",
-                     &h1, &h2, &h3, &h4, &p1, &p2);
-    if (length != 6) {
+    length = sscanf (buffer, "%d %s %s %s (%u,%u,%u,%u,%u,%u)",
+                     &a, &t[1], &t[2], &t[3], &h1, &h2, &h3, &h4, &p1, &p2);
+    if (length != 10) {
         fprintf (stderr, "PASV scan failure!\n");
         return -1;
     }
@@ -261,6 +263,11 @@ int get_cmd (const char *file)
     int rcode, data_fd, file_fd;
     ssize_t length;
 
+    // transfer in binary mode only
+    rcode = one_cmd ("type I");
+    if (rcode < 0)
+        return -1;
+
     // check if file exists to not overwrite it
     file_fd = open (file, O_WRONLY | O_CREAT | O_EXCL, 0777);
     if (file_fd == -1) {
@@ -268,11 +275,6 @@ int get_cmd (const char *file)
         fprintf (stderr, "Rename the file on disk first then call get again.\n");
         return 1;
     }
-
-    // transfer in binary mode only
-    rcode = one_cmd ("type I");
-    if (rcode < 0)
-        return -1;
 
     data_fd = pasv_cmd();
 
@@ -291,6 +293,7 @@ int get_cmd (const char *file)
         return -1;
 
     if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
+        memset (buffer, 0, BUF_SIZE);
         while ((length = read (data_fd, buffer, BUF_SIZE)) > 0) {
             rcode = write (file_fd, buffer, length);
             if (rcode < 0 || length < 0) {
@@ -311,6 +314,62 @@ int get_cmd (const char *file)
     return 1;
 }
 
+int put_cmd (const char *file)
+{
+    char buffer[BUF_SIZE];
+    int rcode, data_fd, file_fd;
+    ssize_t length;
+
+    // transfer in binary mode only
+    rcode = one_cmd ("type I");
+    if (rcode < 0)
+        return -1;
+
+    file_fd = open (file, O_RDONLY);
+    if (file_fd == -1) {
+        perror ("failed to open the file");
+        return 1;
+    }
+
+    data_fd = pasv_cmd();
+
+    if (data_fd <= 0)
+        return data_fd;
+
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s%s", "stor ", file);
+
+    rcode = send_msg (buffer);
+    if (rcode < 0)
+        return -1;
+
+    rcode = read_response (buffer);
+    if (rcode < 0)
+        return -1;
+
+    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
+        memset (buffer, 0, BUF_SIZE);
+        while ((length = read (file_fd, buffer, BUF_SIZE)) > 0) {
+            rcode = send (data_fd, buffer, length, 0);
+            if (rcode != length) {
+                perror ("An Error Occuered during file transfer. Closing Client");
+                close (data_fd);
+                close (file_fd);
+                return -1;
+            }
+            memset (buffer, 0, BUF_SIZE);
+        }
+        close (data_fd);
+        close (file_fd);
+        rcode = read_response (buffer);
+        if (rcode < 0)
+            return -1;
+    }
+
+    close (data_fd);
+    close (file_fd);
+    return 1;
+}
 int quit_cmd()
 {
     char buffer[BUF_SIZE];
@@ -357,13 +416,14 @@ int read_response (char *buffer)
 
     printResponse (stdout, buffer);
 
-    uint32_t i_rcode;
+    int i_rcode;
     char buf[24];
     memset (buf, 0, 24);
     // check for multiline response: d{3}-
-    if (sscanf (buffer, "%u%s", &i_rcode, buf) == 2 && strcmp (buf, "-") == 0) {
+    if ((sscanf (buffer, "%u%s", &i_rcode, buf) == 2) && (strstr (buf, "-") == buf)) {
+        
         memset (buf, 0, 24);
-        snprintf (buf, 24, "%d", i_rcode);
+        snprintf (buf, 24, "%d%s", i_rcode, " ");
         while (1) {
             memset (buffer, 0, BUF_SIZE);
             length = read (sfd, buffer, BUF_SIZE);
@@ -372,6 +432,7 @@ int read_response (char *buffer)
                 break;
         }
     }
+    
     // copy the response to manipulate it
     // without modifing the original buffer
     char rcopy[length];

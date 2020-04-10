@@ -25,3 +25,8 @@ int printSent (FILE *file, const char *msg)
     return fprintf (file, "<-- %s",
                     msg);
 }
+
+void printDebug (char *msg)
+{
+    printf ("DEBUG: %s%s\n", "reached ", msg);
+}

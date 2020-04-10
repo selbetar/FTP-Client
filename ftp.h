@@ -15,9 +15,9 @@ int quit_cmd();
 int feat_cmd();
 int pasv_cmd();
 int nlst_cmd (const char *path);
-
 int get_cmd (const char *file);
 
+int put_cmd (const char *file);
 int read_response (char *buf);
 int send_msg (const char *msg);
 

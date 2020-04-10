@@ -10,5 +10,5 @@ int printErrorInvalidParameter (FILE *file, const char *parameter);
 int printResponse (FILE *file, const char *response);
 
 int printSent (FILE *file, const char *msg);
-
+void printDebug (char *msg);
 #endif
