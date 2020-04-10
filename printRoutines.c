@@ -46,7 +46,8 @@ int printHelp (FILE *file)
                     "              cd     <path>    - to naviagte to a different folder\n"
                     "              nlist  <path>?   - lists files in <path> or current directory if no argument is provided\n"
                     "              pwd              - print current directory\n"
-                    "              features         - list ftp server features\n");
+                    "              features         - list ftp server features\n"
+                    "              quit             - ends session and closes the client\n");
 }
 
 void printDebug (char *msg)
