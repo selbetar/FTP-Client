@@ -2,24 +2,25 @@
 #define __FTCLIENT_H__
 
 #include <fcntl.h>
-#include <sys/stat.h>
+#include <unistd.h>
 
 #define DEFAULT_PORT "21"
 #define MAX_LINE     256
 #define CRLF         "\r\n"
 
 int execute_command (const char *command, const char *parameter);
-int one_cmd (const char *parameter);
-int two_cmd (const char *cmd, const char *parameter);
-int quit_cmd();
-int feat_cmd();
-int pasv_cmd();
-int nlst_cmd (const char *path);
-int get_cmd (const char *file);
+int login_cmd (const char *cmd, const char *param, char *response);
+int quit_cmd (char *response);
+int pasv_cmd (char *response);
+int nlst_cmd (const char *path, char *response);
+int get_cmd (const char *file, char *response);
+int put_cmd (const char *file, char *response);
 
-int put_cmd (const char *file);
-int read_response (char *buf);
-int send_msg (const char *msg);
+int rand_cmd (const char *cmd, const char *param, char *response);
+int bin_type (const char *response);
+
+ssize_t read_response (char *response);
+ssize_t send_msg (const char *msg);
 
 int check_argc (const char *args, unsigned int exepcted);
 void cleanup();

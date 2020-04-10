@@ -75,49 +75,49 @@ int main (int argc, char *argv[])
 int execute_command (const char *command, const char *parameter)
 {
     if (strcasecmp (command, "quit") == 0) {
-        if (check_argc (parameter, 0))
-            return quit_cmd();
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 0))
+            return printErrorInvalidParameter (stdout, parameter);
+        return quit_cmd (NULL);
     }
     else if (strcasecmp (command, "user") == 0) {
-        if (check_argc (parameter, 1))
-            return two_cmd ("user", parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return login_cmd ("user", parameter, NULL);
     }
     else if (strcasecmp (command, "pass") == 0) {
-        if (check_argc (parameter, 1))
-            return two_cmd ("pass", parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return login_cmd ("pass", parameter, NULL);
     }
     else if (strcasecmp (command, "get") == 0) {
-        if (check_argc (parameter, 1))
-            return get_cmd (parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return get_cmd (parameter, NULL);
     }
     else if (strcasecmp (command, "features") == 0) {
-        if (check_argc (parameter, 0))
-            return one_cmd ("feat");
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 0))
+            return printErrorInvalidParameter (stdout, parameter);
+        return rand_cmd ("feat", NULL, NULL);
     }
     else if (strcasecmp (command, "cd") == 0) {
-        if (check_argc (parameter, 1))
-            return two_cmd ("cwd", parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return rand_cmd ("cwd", parameter, NULL);
     }
     else if (strcasecmp (command, "nlist") == 0) {
-        if (check_argc (parameter, 0) || check_argc (parameter, 1))
-            return nlst_cmd (parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 0) && !check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return nlst_cmd (parameter, NULL);
     }
     else if (strcasecmp (command, "pwd") == 0) {
-        if (check_argc (parameter, 0))
-            return one_cmd ("pwd");
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 0))
+            return printErrorInvalidParameter (stdout, parameter);
+        return rand_cmd ("pwd", NULL, NULL);
     }
     else if (strcasecmp (command, "put") == 0) {
-        if (check_argc (parameter, 1))
-            return put_cmd (parameter);
-        return printErrorInvalidParameter (stdout, parameter);
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return put_cmd (parameter, NULL);
     }
     else if (strcasecmp (command, "delete") == 0) {
         // todo
@@ -128,37 +128,43 @@ int execute_command (const char *command, const char *parameter)
     return 0;
 }
 
+// retuns 1 on success
+// -1 on error
+int login_cmd (const char *cmd, const char *param, char *response)
+{
+    int length;
+    char buffer[BUF_SIZE];
+    char *res_buf = response == NULL ? buffer : response;
+    length        = rand_cmd (cmd, param, res_buf);
+
+    return length < 0 ? -1 : bin_type (res_buf);
+}
+
 /**
+ * Sends an arbitrary cmd
+ * if response is not NULL it sets it
+ * to the response of the server
  * RETURN:
  * length of server response to the msg
  * -1 on error
  * */
-int one_cmd (const char *cmd)
+int rand_cmd (const char *cmd, const char *param, char *response)
 {
     char buffer[BUF_SIZE];
-    memset (buffer, 0, BUF_SIZE);
-    snprintf (buffer, BUF_SIZE, "%s", cmd);
 
-    ssize_t length = send_msg (buffer);
+    char *res_buff = response == NULL ? buffer : response;
+    memset (res_buff, 0, BUF_SIZE);
 
-    if (length < 0)
-        return -1;
+    if (param != NULL) {
+        snprintf (res_buff, BUF_SIZE, "%s %s", cmd, param);
+    }
+    else {
+        snprintf (res_buff, BUF_SIZE, "%s", cmd);
+    }
 
-    return read_response (buffer);
-}
+    ssize_t length = send_msg (res_buff);
 
-int two_cmd (const char *cmd, const char *param)
-{
-    char buffer[BUF_SIZE];
-    memset (buffer, 0, BUF_SIZE);
-    snprintf (buffer, BUF_SIZE, "%s%s%s", cmd, " ", param);
-
-    ssize_t length = send_msg (buffer);
-
-    if (length < 0)
-        return -1;
-
-    return read_response (buffer);
+    return length < 0 ? -1 : read_response (res_buff);
 }
 
 /**
@@ -168,27 +174,29 @@ int two_cmd (const char *cmd, const char *param)
  * -1 on error
  * 0 if 227 wasn't received
  * */
-int pasv_cmd()
+int pasv_cmd (char *response)
 {
-    int data_fd = -1;
     char buffer[BUF_SIZE];
     u_int32_t a, h1, h2, h3, h4, p1, p2;
     char t[256];
-    memset (buffer, 0, BUF_SIZE);
-    snprintf (buffer, BUF_SIZE, "%s", "pasv");
 
-    ssize_t length = send_msg (buffer);
+    int data_fd   = -1;
+    char *res_buf = response == NULL ? buffer : response;
+    memset (res_buf, 0, BUF_SIZE);
+    snprintf (res_buf, BUF_SIZE, "%s", "pasv");
+
+    ssize_t length = send_msg (res_buf);
 
     if (length < 0)
         return -1;
 
-    if (read_response (buffer) < 0)
+    if (read_response (res_buf) < 0)
         return -1;
 
-    if (strstr (buffer, "227") != buffer)
+    if (strstr (res_buf, "227") != res_buf)
         return 0;
 
-    length = sscanf (buffer, "%d %s %s %s (%u,%u,%u,%u,%u,%u)",
+    length = sscanf (res_buf, "%d %s %s %s (%u,%u,%u,%u,%u,%u)",
                      &a, &t[1], &t[2], &t[3], &h1, &h2, &h3, &h4, &p1, &p2);
     if (length != 10) {
         fprintf (stderr, "PASV scan failure!\n");
@@ -214,42 +222,34 @@ int pasv_cmd()
     return data_fd;
 }
 
-int nlst_cmd (const char *path)
+// returns 1 on sucess
+// 0 if pasv failed
+// -1 on error
+int nlst_cmd (const char *path, char *response)
 {
     char buffer[BUF_SIZE];
-    int rcode, data_fd;
+    int data_fd;
     ssize_t length;
 
-    data_fd = pasv_cmd();
+    char *res_buf = response == NULL ? buffer : response;
 
+    data_fd = pasv_cmd (NULL);
     if (data_fd <= 0)
         return data_fd;
 
-    memset (buffer, 0, BUF_SIZE);
-    if (path == NULL) {
-        length = snprintf (buffer, BUF_SIZE, "%s", "nlst");
-    }
-    else {
-        length = snprintf (buffer, BUF_SIZE, "%s%s", "nlst ", path);
-    }
-
-    rcode = send_msg (buffer);
-    if (rcode < 0)
+    length = rand_cmd ("nlst", path, res_buf);
+    if (length < 0)
         return -1;
 
-    rcode = read_response (buffer);
-    if (rcode < 0)
-        return -1;
-
-    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
-        memset (buffer, 0, BUF_SIZE);
-        while (read (data_fd, buffer, BUF_SIZE) > 0) {
+    if (strstr (res_buf, "150 ") == res_buf || strstr (res_buf, "125 ") == res_buf) {
+        memset (res_buf, 0, BUF_SIZE);
+        while (read (data_fd, res_buf, BUF_SIZE) > 0) {
             // todo change print format
-            printResponse (stdout, buffer);
-            memset (buffer, 0, BUF_SIZE);
+            printResponse (stdout, res_buf);
+            memset (res_buf, 0, BUF_SIZE);
         }
-        rcode = read_response (buffer);
-        if (rcode < 0)
+        length = read_response (res_buf);
+        if (length < 0)
             return -1;
     }
 
@@ -257,73 +257,64 @@ int nlst_cmd (const char *path)
     return 1;
 }
 
-int get_cmd (const char *file)
+// returns 1 on sucess
+// 0 if pasv failed
+// -1 on error
+int get_cmd (const char *file, char *response)
 {
     char buffer[BUF_SIZE];
-    int rcode, data_fd, file_fd;
-    ssize_t length;
+    int data_fd, file_fd;
+    ssize_t length, w_len;
+    char *res_buf = response == NULL ? buffer : response;
 
-    // transfer in binary mode only
-    rcode = one_cmd ("type I");
-    if (rcode < 0)
-        return -1;
-
-    // check if file exists to not overwrite it
+    // check if file exists so we do not overwrite it
     file_fd = open (file, O_WRONLY | O_CREAT | O_EXCL, 0777);
     if (file_fd == -1) {
-        perror ("failed to create the file");
+        perror ("Failed to create the file");
         fprintf (stderr, "Rename the file on disk first then call get again.\n");
         return 1;
     }
 
-    data_fd = pasv_cmd();
-
+    data_fd = pasv_cmd (NULL);
     if (data_fd <= 0)
         return data_fd;
 
-    memset (buffer, 0, BUF_SIZE);
-    snprintf (buffer, BUF_SIZE, "%s%s", "retr ", file);
-
-    rcode = send_msg (buffer);
-    if (rcode < 0)
+    length = rand_cmd ("retr", file, res_buf);
+    if (length < 0)
         return -1;
 
-    rcode = read_response (buffer);
-    if (rcode < 0)
-        return -1;
-
-    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
-        memset (buffer, 0, BUF_SIZE);
-        while ((length = read (data_fd, buffer, BUF_SIZE)) > 0) {
-            rcode = write (file_fd, buffer, length);
-            if (rcode < 0 || length < 0) {
+    if (strstr (res_buf, "150 ") == res_buf || strstr (res_buf, "125 ") == res_buf) {
+        memset (res_buf, 0, BUF_SIZE);
+        while ((length = read (data_fd, res_buf, BUF_SIZE)) > 0) {
+            w_len = write (file_fd, res_buf, length);
+            if (w_len < 0 || length < 0) {
                 perror ("An Error Occuered during file transfer. Closing Client");
                 close (data_fd);
                 close (file_fd);
                 return -1;
             }
-            memset (buffer, 0, BUF_SIZE);
+            memset (res_buf, 0, BUF_SIZE);
         }
-        rcode = read_response (buffer);
-        if (rcode < 0)
+        length = read_response (res_buf);
+        if (length < 0)
             return -1;
     }
 
     close (data_fd);
     close (file_fd);
+
     return 1;
 }
 
-int put_cmd (const char *file)
+// returns 1 on sucess
+// 0 if pasv failed
+// -1 on error
+int put_cmd (const char *file, char *response)
 {
     char buffer[BUF_SIZE];
-    int rcode, data_fd, file_fd;
-    ssize_t length;
-
-    // transfer in binary mode only
-    rcode = one_cmd ("type I");
-    if (rcode < 0)
-        return -1;
+    int data_fd, file_fd;
+    ssize_t length, w_len;
+    char *res_buf = response == NULL ? buffer : response;
 
     file_fd = open (file, O_RDONLY);
     if (file_fd == -1) {
@@ -331,38 +322,32 @@ int put_cmd (const char *file)
         return 1;
     }
 
-    data_fd = pasv_cmd();
-
+    data_fd = pasv_cmd (NULL);
     if (data_fd <= 0)
         return data_fd;
 
-    memset (buffer, 0, BUF_SIZE);
-    snprintf (buffer, BUF_SIZE, "%s%s", "stor ", file);
-
-    rcode = send_msg (buffer);
-    if (rcode < 0)
+    length = rand_cmd ("stor", file, res_buf);
+    if (length < 0)
         return -1;
 
-    rcode = read_response (buffer);
-    if (rcode < 0)
-        return -1;
-
-    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
-        memset (buffer, 0, BUF_SIZE);
-        while ((length = read (file_fd, buffer, BUF_SIZE)) > 0) {
-            rcode = send (data_fd, buffer, length, 0);
-            if (rcode != length) {
+    if (strstr (res_buf, "150 ") == res_buf || strstr (res_buf, "125 ") == res_buf) {
+        memset (res_buf, 0, BUF_SIZE);
+        while ((length = read (file_fd, res_buf, BUF_SIZE)) > 0) {
+            w_len = send (data_fd, res_buf, length, 0);
+            if (w_len != length) {
                 perror ("An Error Occuered during file transfer. Closing Client");
                 close (data_fd);
                 close (file_fd);
                 return -1;
             }
-            memset (buffer, 0, BUF_SIZE);
+            memset (res_buf, 0, BUF_SIZE);
         }
+
         close (data_fd);
         close (file_fd);
-        rcode = read_response (buffer);
-        if (rcode < 0)
+
+        length = read_response (res_buf);
+        if (length < 0)
             return -1;
     }
 
@@ -370,7 +355,10 @@ int put_cmd (const char *file)
     close (file_fd);
     return 1;
 }
-int quit_cmd()
+
+// returns -2 on sucess
+// -1 on error
+int quit_cmd (char *response)
 {
     char buffer[BUF_SIZE];
     memset (buffer, 0, BUF_SIZE);
@@ -381,15 +369,29 @@ int quit_cmd()
     if (length < 0)
         return -1;
 
-    read_response (buffer);
+    char *res_buf = response == NULL ? buffer : response;
+    read_response (res_buf);
     cleanup();
     return -2;
+}
+
+// sets the transfer type to binary on login
+// returns 1 on success
+// returns -1 on error
+int bin_type (const char *response)
+{
+    if (strstr (response, "230 ")) {
+        ssize_t length = rand_cmd ("type", "I", NULL);
+        if (length < 0)
+            return -1;
+    }
+    return 1;
 }
 
 /*
 * returns -1 on error, number of bytes sent otherwise
 */
-int send_msg (const char *msg)
+ssize_t send_msg (const char *msg)
 {
     char buffer[BUF_SIZE];
     ssize_t length;
@@ -404,40 +406,45 @@ int send_msg (const char *msg)
     return length;
 }
 
-int read_response (char *buffer)
+/*
+* returns -1 on error, number of bytes read otherwise
+*/
+ssize_t read_response (char *response)
 {
 
-    memset (buffer, 0, BUF_SIZE);
-    ssize_t length = read (sfd, buffer, BUF_SIZE);
+    memset (response, 0, BUF_SIZE);
+    ssize_t length = read (sfd, response, BUF_SIZE);
     if (length <= 0) {
         perror ("Error while reading from server. Terminiating Control Connection");
         return -1;
     }
 
-    printResponse (stdout, buffer);
+    printResponse (stdout, response);
 
     int i_rcode;
     char buf[24];
     memset (buf, 0, 24);
     // check for multiline response: d{3}-
-    if ((sscanf (buffer, "%u%s", &i_rcode, buf) == 2) && (strstr (buf, "-") == buf)) {
-        
+    if ((sscanf (response, "%u%s", &i_rcode, buf) == 2) && (strstr (buf, "-") == buf)) {
         memset (buf, 0, 24);
-        snprintf (buf, 24, "%d%s", i_rcode, " ");
-        while (1) {
-            memset (buffer, 0, BUF_SIZE);
-            length = read (sfd, buffer, BUF_SIZE);
-            printResponse (stdout, buffer);
-            if (strstr (buffer, buf) == buffer)
-                break;
+        snprintf (buf, 24, "%d%s", i_rcode, " End");
+
+        // check if the entire response hasn't been sent
+        if (strstr (response, buf) == NULL) {
+            while (1) {
+                memset (response, 0, BUF_SIZE);
+                length = read (sfd, response, BUF_SIZE);
+                if (strstr (response, buf) != NULL)
+                    break;
+            }
         }
     }
-    
+
     // copy the response to manipulate it
     // without modifing the original buffer
     char rcopy[length];
     memset (rcopy, 0, length);
-    snprintf (rcopy, BUF_SIZE, "%s", buffer);
+    snprintf (rcopy, BUF_SIZE, "%s", response);
 
     char *rcode = strtok (rcopy, " ");
     if (strcmp (rcode, "421") == 0) {

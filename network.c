@@ -1,6 +1,7 @@
- #include "network.h"
- #include "common.h"
+#include "network.h"
+#include "common.h"
 #include <stdio.h>
+#include <unistd.h>
 
 int create_connection (const char *host, const char *port)
 {
@@ -13,7 +14,7 @@ int create_connection (const char *host, const char *port)
 
     /* Obtain address(es) matching host/port */
     memset (&hints, 0, sizeof (struct addrinfo));
-    hints.ai_family   = PF_INET;   /* Allow IPv4 */
+    hints.ai_family   = PF_INET; /* Allow IPv4 */
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags    = 0;
     hints.ai_protocol = 0; /* Any protocol */
@@ -45,7 +46,7 @@ int create_connection (const char *host, const char *port)
         fprintf (stderr, "Could not connect\n");
         return -1;
     }
-    
+
     freeaddrinfo (result); /* No longer needed */
 
     return sfd;
