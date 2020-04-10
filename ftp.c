@@ -90,7 +90,9 @@ int execute_command (const char *command, const char *parameter)
         return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "get") == 0) {
-        // todo
+        if (check_argc (parameter, 1))
+            return get_cmd (parameter);
+        return printErrorInvalidParameter (stdout, parameter);
     }
     else if (strcasecmp (command, "features") == 0) {
         if (check_argc (parameter, 0))
@@ -238,15 +240,74 @@ int nlst_cmd (const char *path)
         return -1;
 
     if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
-        while (read (data_fd, buffer, BUF_SIZE) > 0)
+        memset (buffer, 0, BUF_SIZE);
+        while (read (data_fd, buffer, BUF_SIZE) > 0) {
+            // todo change print format
             printResponse (stdout, buffer);
-
+            memset (buffer, 0, BUF_SIZE);
+        }
         rcode = read_response (buffer);
         if (rcode < 0)
             return -1;
     }
 
     close (data_fd);
+    return 1;
+}
+
+int get_cmd (const char *file)
+{
+    char buffer[BUF_SIZE];
+    int rcode, data_fd, file_fd;
+    ssize_t length;
+
+    // check if file exists to not overwrite it
+    file_fd = open (file, O_WRONLY | O_CREAT | O_EXCL, 0777);
+    if (file_fd == -1) {
+        perror ("failed to create the file");
+        fprintf (stderr, "Rename the file on disk first then call get again.\n");
+        return 1;
+    }
+
+    // transfer in binary mode only
+    rcode = one_cmd ("type I");
+    if (rcode < 0)
+        return -1;
+
+    data_fd = pasv_cmd();
+
+    if (data_fd <= 0)
+        return data_fd;
+
+    memset (buffer, 0, BUF_SIZE);
+    snprintf (buffer, BUF_SIZE, "%s%s", "retr ", file);
+
+    rcode = send_msg (buffer);
+    if (rcode < 0)
+        return -1;
+
+    rcode = read_response (buffer);
+    if (rcode < 0)
+        return -1;
+
+    if (strstr (buffer, "150 ") == buffer || strstr (buffer, "125 ") == buffer) {
+        while ((length = read (data_fd, buffer, BUF_SIZE)) > 0) {
+            rcode = write (file_fd, buffer, length);
+            if (rcode < 0 || length < 0) {
+                perror ("An Error Occuered during file transfer. Closing Client");
+                close (data_fd);
+                close (file_fd);
+                return -1;
+            }
+            memset (buffer, 0, BUF_SIZE);
+        }
+        rcode = read_response (buffer);
+        if (rcode < 0)
+            return -1;
+    }
+
+    close (data_fd);
+    close (file_fd);
     return 1;
 }
 
@@ -295,12 +356,12 @@ int read_response (char *buffer)
     }
 
     printResponse (stdout, buffer);
-    
+
     uint32_t i_rcode;
     char buf[24];
     memset (buf, 0, 24);
     // check for multiline response: d{3}-
-    if (sscanf (buffer, "%u%s", &i_rcode, buf) == 2 && strcmp(buf, "-") == 0) {
+    if (sscanf (buffer, "%u%s", &i_rcode, buf) == 2 && strcmp (buf, "-") == 0) {
         memset (buf, 0, 24);
         snprintf (buf, 24, "%d", i_rcode);
         while (1) {
@@ -335,11 +396,11 @@ int read_response (char *buffer)
  * */
 int check_argc (const char *args, unsigned int exepcted)
 {
-    int count = 0;
+    int count = 1;
     char argcpy[BUF_SIZE];
 
-    if (exepcted == 0) {
-        return args == NULL;
+    if (args == NULL) {
+        return exepcted == 0;
     }
 
     // make a copy of parameter for count checking
@@ -349,9 +410,9 @@ int check_argc (const char *args, unsigned int exepcted)
     char *param = strtok (argcpy, " \t\n\f\r\v");
     while (param != NULL) {
         param = strtok (NULL, " \t\n\f\r\v");
-        count++;
+        if (param != NULL)
+            count++;
     }
-
     return count == exepcted;
 }
 
