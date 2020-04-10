@@ -120,7 +120,9 @@ int execute_command (const char *command, const char *parameter)
         return put_cmd (parameter, NULL);
     }
     else if (strcasecmp (command, "delete") == 0) {
-        // todo
+        if (!check_argc (parameter, 1))
+            return printErrorInvalidParameter (stdout, parameter);
+        return rand_cmd ("dele", parameter, NULL);
     }
     else {
         return printErrorInvalidCommand (stdout, command);
